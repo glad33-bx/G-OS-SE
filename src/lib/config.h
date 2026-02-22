@@ -3,7 +3,7 @@
 
 // --- Informations Système ---
 #define OS_NAME "G-OS-SE"
-#define OS_VERSION "1.2.0-stable"
+#define OS_VERSION "0.01"
 #define DEBUG 0
 
 // --- Adresses Matérielles Vidéo (VGA) ---
