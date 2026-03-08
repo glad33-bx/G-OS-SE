@@ -1,4 +1,4 @@
-#include "string.h"
+#include "ustring.h"
 #include "gos_types.h"
 
 static char* next_token = 0; // strtok
@@ -52,27 +52,6 @@ char *strchr(const char *s, int c) {
         }
     }
     return (char *)s;
-}
-
-char* strstr(const char* haystack, const char* needle) {
-    if (!*needle) return (char*)haystack;
-    
-    for (; *haystack; haystack++) {
-        if (*haystack == *needle) {
-            const char *h = haystack;
-            const char *n = needle;
-            
-            while (*h && *n && *h == *n) {
-                h++;
-                n++;
-            }
-            
-            if (!*n) {
-                return (char*)haystack;
-            }
-        }
-    }
-    return 0;
 }
 
 int memcmp(const void *s1, const void *s2, uint32_t n) {
@@ -189,27 +168,6 @@ void itoa_hex(char* dest, uint32_t num) {
 }
 
 
-void kprint_hex(uint32_t num) {
-    char* digits = "0123456789ABCDEF";
-    char hex_str[11]; // "0x" + 8 caractères + '\0'
-    
-    hex_str[0] = '0';
-    hex_str[1] = 'x';
-    hex_str[10] = '\0';
-
-    // On remplit de droite à gauche pour garder les zéros non significatifs
-    for (int i = 9; i >= 2; i--) {
-        hex_str[i] = digits[num % 16];
-        num /= 16;
-    }
-
-    kprintf(hex_str);
-    // #ifdef USERLAND
-    //     printf("%s", hex_str); // Utilise ton wrapper de syscall
-    // #else
-    //     kprintf("%s", hex_str); // Utilise la fonction directe du noyau
-    // #endif
-}
 
 // fonction qui convertit en base 10
 void itoa(char* dest, uint32_t n) {
@@ -405,24 +363,5 @@ int isxdigit(int c){
 	return isdigit(c) || ((unsigned)c | 32) - 'a' < 6;
 }
 
-char* str_padding(char* buffer, int current_len, int target_len) {
-    int spaces = target_len - current_len;
-    
-    // Si on est déjà au-delà de la taille cible, on ne fait rien
-    if (spaces <= 0) return buffer;
-
-    // On pointe directement sur le '\0' actuel
-    char* p = buffer + current_len;
-
-    // On remplit d'espaces
-    for (int i = 0; i < spaces; i++) {
-        *p++ = ' ';
-    }
-
-    // On n'oublie SURTOUT PAS de remettre le nouveau terminateur
-    *p = '\0';
-
-    return buffer;
-}
 
 

@@ -172,15 +172,51 @@ void kprintf(char *format, ...) {
     for (int i = 0; format[i] != '\0'; i++) {
         if (format[i] == '%') {
             i++;
+            
+            int width = 0;
+            int pad_zero = 0;
+            int left_align = 0;
+
+            // Gestion de l'alignement à gauche (ex: %-15s)
+            if (format[i] == '-') {
+                left_align = 1;
+                i++;
+            }
+
+            // Gestion du padding de zéro (ex: %02d)
+            if (format[i] == '0') {
+                pad_zero = 1;
+                i++;
+            }
+
+            // Lecture de la largeur de champ (ex: %15s ou %02d)
+            while (format[i] >= '0' && format[i] <= '9') {
+                width = width * 10 + (format[i] - '0');
+                i++;
+            }
+
             switch (format[i]) {
                 case 's': { // CHAÎNE
                     char *s = va_arg(args, char *);
                     if (s == 0) s = "(null)"; // Sécurité pour les pointeurs nuls
+                    int len = strlen(s);
+                    
+                    if (!left_align) {
+                        for (int p = 0; p < width - len; p++) putc(' ');
+                    }
                     puts(s);
+                    if (left_align) {
+                        for (int p = 0; p < width - len; p++) putc(' ');
+                    }
                     break;
                 }
                 case 'd': { // NOMBRE ENTIER
                     int d = va_arg(args, int);
+                    // On calcule la longueur du nombre pour le padding
+                    int len = get_int_len(d); 
+                    for (int p = 0; p < width - len; p++) {
+                        putc(pad_zero ? '0' : ' ');
+                    }
                     putd(d);
                     break;
                 }
@@ -413,5 +449,18 @@ void move_cursor_forward() {
         update_hardware_cursor();
     }
 }
+
+void update_cursor_position(int x, int y) {
+    uint16_t pos = y * 80 + x; // 80 est la largeur standard de l'écran
+
+    // On envoie la partie basse de la position (8 bits) au port 0x3D5
+    outb(0x3D4, 0x0F);
+    outb(0x3D5, (uint8_t)(pos & 0xFF));
+    
+    // On envoie la partie haute de la position (8 bits)
+    outb(0x3D4, 0x0E);
+    outb(0x3D5, (uint8_t)((pos >> 8) & 0xFF));
+}
+
 
 

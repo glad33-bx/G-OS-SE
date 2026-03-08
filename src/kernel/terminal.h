@@ -55,8 +55,8 @@ void terminal_backspace();
 
 void move_cursor_back();
 void move_cursor_forward();
-//void update_cursor();
 void enable_cursor(uint8_t cursor_start, uint8_t cursor_end);
-void update_hardware_cursor() ;
+void update_hardware_cursor();
+void update_cursor_position(int x, int y);
 
 #endif

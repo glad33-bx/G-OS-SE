@@ -11,6 +11,7 @@ Le premier secteur (LBA 0) du disque n'est plus vide.
 Il doit contenir le BIOS Parameter Block. 
 C'est là que l'OS stocke la "carte d'identité" du disque.
 */
+
 /*struct fat_bpb {
     uint8_t  jmp[3];
     char     oem[8];
@@ -173,26 +174,25 @@ struct fat_dir_entry {
     uint16_t last_mod_date;
     uint16_t cluster_low;      // Partie basse du cluster
     uint32_t size;             // Taille du fichier en octets
+} __attribute__((packed));;
+#pragma pack(pop)
+
+// en prévision du tri des entrées de la FAT
+struct file_info {
+    char name[13];
+    uint32_t size;
+    uint16_t date;
+    uint16_t time;
+    uint8_t attr;
+    int is_bin;
 };
-#pragma pack(pop)/*
-Pour lire un fichier sur FAT16, GillesOS devra suivre ce chemin :
-    Lire le BPB (Secteur 0) pour savoir où commence la FAT et où commence le répertoire racine.
-    Chercher dans le Root Directory le nom du fichier (ex: KERNEL BIN).
-    Récupérer le premier Cluster du fichier.
-    Consulter la FAT pour savoir quel est le cluster suivant (si le fichier est gros).
-
-Le calcul du Secteur de Données
-C'est là que les maths de ton mkfs.vfat deviennent utiles. Un fichier 
-commence à un numéro de Cluster. En FAT16, le Cluster 2 est le tout premier cluster de données.
-
-D'après tes logs, la zone de données commence au secteur 164. La formule magique est :
-Secteur=164+(Cluster−2)×SecteursParCluster
-*/
 
 void fat_init();
 
-//void fat_list_root();
-void fat_ls();
+void fat_ls(const char* target_dir);
+int fat_get_dir_list(const char* target_dir, char* out_buffer);
+int fat_list_to_buffer(const char* target_dir, char* out_buffer);
+
 
 uint32_t fat_find_file_cluster(const char* filename);
 uint32_t fat_find_free_cluster();
@@ -201,9 +201,15 @@ uint32_t fat_cluster_to_lba(uint32_t cluster);
 void fat_read_cluster(uint32_t cluster, uint8_t* buffer);
 void fat_write_cluster(uint32_t cluster, uint8_t* buffer);
 void fat_set_cluster_value(uint32_t cluster, uint32_t value);
+void fat_free_cluster_chain(uint32_t start_cluster);
+uint32_t fat_get_cluster_from_path(const char* path);
+
 
 void to_fat_name(const char* input, char* output);
-uint32_t get_fat_timestamp();
+uint32_t fat_resolve_path(const char* path, struct fat_dir_entry* out_entry);
+uint32_t fat_find_in_dir(uint32_t dir_cluster, const char* fat_name, struct fat_dir_entry* out_entry);
+uint32_t fat_find_file_cluster(const char* name_to_find);
+uint32_t fat_find_file_cluster_in_dir(uint32_t dir_cluster, const char* filename);
 
 void* fat_get_file_content(uint32_t cluster);
 void load_file(uint32_t start_cluster, uint8_t* destination);
@@ -215,13 +221,30 @@ int fat_read_file(char* name, uint8_t* buffer);
 void fat_cat(const char* filename);
 void fat_touch(const char* filename);
 void fat_echo(const char* text, const char* filename);
+void fat_update_file_size(const char* filename, uint32_t new_size);
+void fat_update_file_first_cluster(const char* filename, uint32_t cluster);
 
-int fat_mkdir(char* name);
+
+uint32_t get_fat_timestamp();
+void fat_decode_time(uint16_t time, int *h, int *m, int *s);
+uint16_t fat_encode_time(int hour, int min, int sec);
+void fat_decode_date(uint16_t date, int *d, int *m, int *y);
+uint16_t fat_encode_date(int day, int month, int year);
+void fat_update_file_timestamp(const char* filename);
+uint16_t get_fat_time();
+uint16_t get_fat_date();
+
+void fat_mkdir(const char* dirname) ;
 int is_directory(char* name);
 int fat_get_entry(char* fat_name, uint8_t* buffer_out);
 int fat_cd(char* path) ;
+int is_dir_empty(uint32_t cluster);
+void fat_rmdir(const char* dirname);
+
 
 void fat_debug_root_dump();
 void shell_loop();
 
+
+void print_padding(int current_len, int target_len);
 

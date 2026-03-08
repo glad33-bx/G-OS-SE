@@ -15,4 +15,7 @@ void init_memory();
 void *kmalloc(unsigned int size);
 void kfree(void *ptr);
 
+uint32_t memory_get_total();
+uint32_t memory_get_used();
+
 #endif

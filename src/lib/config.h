@@ -3,8 +3,11 @@
 
 // --- Informations Système ---
 #define OS_NAME "G-OS-SE"
-#define OS_VERSION "0.01"
+#define OS_VERSION "0.02"
 #define DEBUG 0
+
+// --- FAT
+#define FAT_NB_MAX 256
 
 // --- Adresses Matérielles Vidéo (VGA) ---
 #define VIDEO_ADDR         0xB8000  // Adresse de base du mode texte

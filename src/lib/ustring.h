@@ -1,9 +1,8 @@
-#ifndef STRING_H
-#define STRING_H
+#ifndef USTRING_H
+#define USTRING_H
 
-#include "../kernel/terminal.h"
+#include "string.h"
 #include "gos_types.h"
-
 
 int str_equal(char *s1, char *s2);
 int str_starts_with(const char* str, const char* prefix) ;
@@ -26,8 +25,6 @@ void *memcpy(void *dest, const void *src, size_t n);
 char* strcat(char* dest, const char* src);
 char* strtok(char* str, const char* delim);
 int strcmp(const char *s1, const char *s2);
-char* str_padding(char* buffer,int current_len, int target_len);
-void kprint_hex(uint32_t num);
 
 void itoa_hex(char* dest, uint32_t num);
 void itoa(char* dest, uint32_t n);
@@ -41,3 +38,4 @@ int hexval(char c);
 
 
 #endif
+

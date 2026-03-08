@@ -12,6 +12,8 @@
 
 #define PROMPT_STR_VISIBLE_SIZE 2
 
+extern char current_path_name[256];
+
 // Point d'entrée pour interpréter une ligne de commande
 void interpret_command(char* buffer);
 
@@ -22,6 +24,10 @@ void process_single_command(char* buffer);
 uint32_t get_esp();
 void command_info();
 void force_exit();
-void shell_more(char* filename);
+void shell_more(const char* filename);
+
+void shell_free();
+void shell_run(char* filename);
+void shell_cp(const char* src, const char* dest);
 
 #endif

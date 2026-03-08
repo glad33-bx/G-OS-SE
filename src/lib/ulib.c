@@ -2,6 +2,7 @@
 #include "../kernel/syscall_nums.h" // On inclut les définitions
 #include "gos_stdarg.h"
 
+
 void putc_syscall(char c) {
     asm volatile(
         "int $0x80"
@@ -19,6 +20,7 @@ void print(char* msg) {
         : "memory"
     );
 }
+
 
 void print_color(char* msg, int color) {
     asm volatile(
@@ -48,7 +50,6 @@ void exit(int code) {
 }
 
 // --- Fonctions utilitaires internes pour printf ---
-
 static void printf_putd(int n) {
     if (n < 0) {
         putc_syscall('-');
@@ -57,6 +58,7 @@ static void printf_putd(int n) {
     if (n / 10) printf_putd(n / 10);
     putc_syscall((n % 10) + '0');
 }
+
 
 static void printf_putx(unsigned int n) {
     char *hex = "0123456789ABCDEF";
@@ -72,7 +74,6 @@ static void printf_puts(char *s) {
 }
 
 // --- La fonction printf officielle pour tes apps ---
-
 void printf(char *format, ...) {
     va_list args;
     va_start(args, format);
@@ -98,7 +99,6 @@ void printf(char *format, ...) {
     va_end(args);
 }
 
-
 char getc() {
     int c;
     asm volatile(
@@ -109,4 +109,46 @@ char getc() {
     );
     return (char)c;
 }
+
+int sys_read_file(const char* name, void* buffer, unsigned int size) {
+    int res;
+    asm volatile(
+        "int $0x80"
+        : "=a"(res) 
+        : "a"(SYS_READ_FILE), "b"(name), "c"(buffer), "d"(size) // 10 = SYS_READ_FILE
+        : "memory"
+    );
+    return res;
+}
+
+/*int sys_read_file(const char* path, char* buffer, int size) {
+    int ret;
+    asm volatile (
+        "int $0x80"
+        : "=a"(ret)
+        : "a"(SYS_READ_FILE), // EAX
+          "b"(path),          // EBX : Adresse du nom
+          "c"(buffer),        // ECX : Adresse du buffer <--- VERIFIE ICI
+          "d"(size)           // EDX : Taille
+    );
+    return ret;
+}*/
+
+void get_command_line(char* buf) {
+    asm volatile("int $0x80" : : "a"(SYS_GET_ARGV), "b"(buf) : "memory");
+}
+
+
+int sys_ls(const char* path, char* buffer) {
+    int ret;
+    asm volatile ("int $0x80" : "=a"(ret) : "a"(SYS_LS), "b"(path), "c"(buffer));
+    return ret;
+}
+
+void sys_set_color(uint8_t fg, uint8_t bg) {
+    asm volatile("int $0x80" 
+                 : 
+                 : "a"(SYS_SET_COLOR), "b"(fg), "c"(bg));
+}
+
 

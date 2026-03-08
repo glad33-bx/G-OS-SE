@@ -23,7 +23,7 @@ La structure du fichier config.cnf
 Pour faire simple et efficace, nous allons créer un fichier texte très basique sur ton disque FAT.
     Contenu du fichier : TZ=1 (pour GMT+1) ou TZ=2 (pour l'été).
 */
-void load_configuration() {
+/*void load_configuration() {
     // 1. On prépare le nom au format FAT (8 + 3)
     // "CONFIG.CNF" -> "CONFIG  CNF"
     //char fat_name[12]="CONFIG.CNF\0";
@@ -78,6 +78,52 @@ void load_configuration() {
         }
     } else {
         kprintf("[DEBUG] CONFIG.CNF introuvable (meme avec espaces)\n");
+    }
+}*/
+void load_configuration() {
+    //const char* fat_name = "CONFIG  CNF";
+    char fat_name[12]="CONFIG.CNF\0";
+    int cluster = fat_find_file_cluster(fat_name);
+    
+    if (cluster != -1) {
+        char* content = (char*)fat_get_file_content(cluster);
+        if (!content) return;
+
+        // On parcourt le buffer (512 octets pour un secteur standard)
+        for (int i = 0; i < 500; i++) {
+            
+            // --- Fuseau Horaire (TZ=1 ou TZ=-5) ---
+            if (content[i] == 'T' && content[i+1] == 'Z' && content[i+2] == '=') {
+                timezone_offset = atoi(&content[i+3]); 
+                kprintf("[INIT] Fuseau horaire : GMT%s%d\n", (timezone_offset >= 0) ? "+" : "", timezone_offset);
+                // On n'utilise PAS de return ici pour lire la suite !
+            }
+
+            // --- Clavier (KBD=fr) ---
+            if (content[i] == 'K' && content[i+1] == 'B' && content[i+2] == 'D' && content[i+3] == '=') {
+                char layout[3];
+                layout[0] = content[i+4];
+                layout[1] = content[i+5];
+                layout[2] = '\0';
+                keyboard_set_layout(layout);
+                kprintf("[INIT] Clavier : %s\n", layout);
+            }
+
+            // --- Police (FONT=terminus) ---
+            if (content[i] == 'F' && content[i+1] == 'O' && content[i+2] == 'N' && content[i+3] == 'T' && content[i+4] == '=') {
+                char font_name[16];
+                int j = 0;
+                while (content[i+5+j] > 32 && j < 15) {
+                    font_name[j] = content[i+5+j];
+                    j++;
+                }
+                font_name[j] = '\0';
+                switch_font(font_name);
+                kprintf("[INIT] Police : %s\n", font_name);
+            }
+        }
+    } else {
+        kprintf("[FS] CONFIG.CNF absent, parametres par defaut.\n");
     }
 }
 

@@ -4,7 +4,9 @@
 #include "../kernel/rtc.h"
 #include "../lib/string.h"
 #include "../kernel/terminal.h"
+#include "../kernel/keyboard.h"
 #include "vga.h"
+#include "../kernel/syscalls.h"
 
 // Ces symboles viennent du script de liaison (linker.ld)
 extern uint32_t _kernel_start;
@@ -31,9 +33,17 @@ extern uint32_t buffer_idx;
 extern uint32_t cursor_pos;
 extern uint8_t prompt_len;
 
+char current_path_name[256] = "/";
+
 typedef void (*entry_point_t)(void);
 
 uint32_t shell_stack_ptr = 0;
+
+char global_cmd_buffer[128]; // Contiendra "cat.bin notes.txt"
+
+void set_current_command(const char* cmd);
+
+
 
 void run_application(char* filename) {
     // 1. Trouver le fichier sur le disque
@@ -124,8 +134,38 @@ void process_single_command(char* buffer) {
         kprintf("ls, touch, cat, echo, rm, clear, free, malloc, reboot, ver\n");
     }
     // --- SYSTEME DE FICHIERS ---
-    else if (strcmp(buffer, "ls") == 0) {
-         fat_ls();
+    /*else if (str_starts_with(buffer, "ls")) {
+        char* filename = buffer + 6;
+        trim(filename);
+        if (filename[0] != '\0') {
+            fat_ls(filename);
+        } else {
+            fat_ls("");
+        }
+    }*/
+    /*else if (strcmp(buffer, "ls") == 0 || str_starts_with(buffer, "ls ")) {
+        char* filename = "";
+        if (strlen(buffer) > 3) {
+            filename = buffer + 3; // On saute "ls " (3 caractères)
+            trim(filename);
+        }
+        fat_ls(filename);
+    }*/
+    else if (str_starts_with(buffer, "ls")) {
+        char* arg = NULL;
+        if (strlen(buffer) > 3) {
+            arg = buffer + 3; // Récupère "-l" ou tout autre argument
+            trim(arg);
+        }
+        fat_ls(arg);
+    }
+    else if (str_starts_with(buffer, "dir")) {
+        char* arg = NULL;
+        if (strlen(buffer) > 4) {
+            arg = buffer + 4; // Récupère "-l" ou tout autre argument
+            trim(arg);
+        }
+        fat_ls(arg);
     }
     else if (str_starts_with(buffer, "touch ")) {
         char* filename = buffer + 6;
@@ -154,7 +194,7 @@ void process_single_command(char* buffer) {
     else if (memcmp(buffer, "more ", 5) == 0) {
         // On récupère le nom du fichier (ce qui suit "more ")
         //shell_more(buffer + 5);
-        fat_cat(buffer+5);
+        shell_more(buffer+5);
     }
     else if (str_starts_with(buffer, "echo ")) {
         // Logique simplifiée du echo >
@@ -189,7 +229,8 @@ void process_single_command(char* buffer) {
             dest[j] = '\0';
 
             if (dest[0] != '\0') {
-                fat_copy_file(src, dest);
+                //fat_copy_file(src, dest);
+                shell_cp(src, dest);
             } else {
                 kprintf("Usage: cp <src> <dest>\n");
             }
@@ -237,6 +278,15 @@ void process_single_command(char* buffer) {
             kprintf("Usage: mkdir <dirname>\n");
         }
     }
+    else if (str_starts_with(buffer, "rmdir ")) {
+        char* filename = buffer + 6;
+        trim(filename);
+        if (filename[0] != '\0') {
+            fat_rmdir(filename);
+        } else {
+            kprintf("Usage: rm <filename>\n");
+        }
+    }
     else if (str_starts_with(buffer, "cd ")) {
         char* dirname = buffer + 3;
         trim(dirname);
@@ -253,11 +303,13 @@ void process_single_command(char* buffer) {
     // --- MEMOIRE & SYSTEME ---
     else if (strcmp(buffer, "free") == 0 || strcmp(buffer, "malloc") == 0) {
         kprintf("\n[MEM] Heap check...\n");
+        shell_free();
         // Appel de tes fonctions de debug mémoire ici
     }
     else if (strcmp(buffer, "clear") == 0) {
         clear_screen();
     }
+
     else if (strcmp(buffer, "reboot") == 0) {
         reboot();
     }
@@ -315,15 +367,17 @@ void process_single_command(char* buffer) {
     }
     // --- CMD ---
     else if (str_starts_with(buffer, "run ")) {
-        char* cmd = buffer + 4;
+       char* cmd = buffer + 4;
         //char filename[13];
+        strcpy(global_cmd_buffer, cmd);
         char* arg = strchr(cmd, ' '); // Cherche un espace après le nom du fichier
 
         if (arg) {
             *arg = '\0'; // Coupe la chaîne pour isoler le nom du fichier
             arg++;       // Pointeur vers le début de l'argument
         }
-
+        shell_run(cmd);
+/* 
         if (fat_read_file(cmd, (uint8_t*)0x200000)) {
             kprintf("Chargement fini.\n"); 
             
@@ -339,7 +393,8 @@ void process_single_command(char* buffer) {
             // IMPORTANT : Après le retour de l'appli, on peut vider EDX 
             // pour éviter que la prochaine commande ne croie recevoir un argument
             asm volatile("xor %%edx, %%edx" ::: "edx");
-        }
+        }*/
+
     }
     else {
         kprintf("\nCommande '%s' inconnue.\n", buffer);
@@ -429,7 +484,9 @@ void shell_loop() {
     asm volatile("mov %%esp, %0" : "=m"(shell_stack_ptr));
 
     while (1) {
-        kprintf("\n> ");
+        //kprintf("\n> ");
+        // On affiche le nom du dossier actuel en majuscules pour le style
+        kprintf("\n%s > ", current_path_name);
         prompt_len = cursor_x; 
         update_hardware_cursor();
 
@@ -462,7 +519,7 @@ void shell_loop() {
     }
 }
 
-void shell_more(char* filename) {
+/*void shell_more(char* filename) {
     // 1. On cherche d'abord si le fichier existe pour connaître sa taille
     // On pourrait utiliser fat_find_file_cluster, mais on a besoin de la taille 
     // pour allouer juste ce qu'il faut.
@@ -504,7 +561,186 @@ void shell_more(char* filename) {
     }
 
     kfree(buffer);
+}*/
+
+/*void shell_more(const char* filename) {
+    uint32_t cluster = fat_find_file_cluster(filename);
+    if (cluster == (uint32_t)-1) {
+        kprintf("Fichier introuvable.\n");
+        return;
+    }
+
+    char* content = (char*)fat_get_file_content(cluster);
+    int line_count = 0;
+    
+    for (int i = 0; content[i] != '\0'; i++) {
+        kprintf("%c", content[i]);
+        if (content[i] == '\n') line_count++;
+
+        if (line_count >= 20) {
+            kprintf("\n-- Appuyez sur une touche pour la suite --");
+            keyboard_getc(); // Remplace wait_key()
+            kprintf("\r                                         \r"); // Efface la ligne
+            line_count = 0;
+        }
+    }
+}*/
+
+void shell_more(const char* filename) {
+    char fat_name[11];
+    to_fat_name(filename, fat_name);
+    
+    uint32_t cluster = fat_find_file_cluster(fat_name);
+    if (cluster == (uint32_t)-1) {
+        kprintf("Fichier introuvable.\n");
+        return;
+    }
+
+    // On utilise ton buffer global ou une allocation
+    char* content = (char*)fat_get_file_content(cluster);
+    int lines = 0;
+    for (int i = 0; content[i] != '\0'; i++) {
+        kprintf("%c", content[i]);
+        if (content[i] == '\n') lines++;
+        if (lines >= 20) {
+            kprintf("-- Press any key --");
+            keyboard_getc(); // Attend une touche
+            lines = 0;
+        }
+    }
 }
+
+void shell_free() {
+    uint32_t total = memory_get_total(); // À implémenter dans ton mm
+    uint32_t used = memory_get_used();
+    kprintf("RAM: %d KB / %d KB utilisee\n", used / 1024, total / 1024);
+}
+
+/*void shell_run(const char* filename) {
+    uint32_t cluster = fat_find_file_cluster(filename);
+    if (cluster == (uint32_t)-1) {
+        kprintf("Erreur : Impossible de trouver le binaire.\n");
+        return;
+    }
+
+    uint8_t* load_addr = (uint8_t*)0x200000; 
+    
+    // On utilise ta fonction existante
+    load_file(cluster, load_addr);
+    
+    kprintf("Lancement de %s...\n", filename);
+    
+    // Definition d'un pointeur de fonction vers l'adresse de chargement
+    void (*entry_point)() = (void (*)())0x200000;
+    entry_point(); 
+}*/
+
+/*void shell_run(const char* filename) {
+    char fat_name[11];
+    to_fat_name(filename, fat_name);
+
+    kprintf("fat_name : [%s] - filename:[%s]\n",fat_name,filename);
+    
+    uint32_t cluster = fat_find_file_cluster(fat_name);
+    if (cluster == (uint32_t)-1) {
+        kprintf("Binaire introuvable.\n");
+        return;
+    }
+
+    uint8_t* load_addr = (uint8_t*)0x200000; 
+    load_file(cluster, load_addr); // Ta fonction qui suit la chaîne FAT
+    
+    void (*entry_point)() = (void (*)())load_addr;
+    entry_point(); 
+}*/
+
+/*void shell_run(char* command_line) {
+    char temp_line[128];
+    strcpy(temp_line, command_line); // On travaille sur une copie
+
+    // 1. ISOLER LE NOM DU BINAIRE
+    // strtok coupe la chaîne au premier espace
+    char* binary_name = strtok(temp_line, " "); 
+    if (!binary_name) return;
+
+    char fat_name[11];
+    to_fat_name(binary_name, fat_name);
+
+    kprintf("[DEBUG] Recherche de : [%s]\n", fat_name);
+    
+    uint32_t cluster = fat_find_file_cluster(fat_name);
+    if (cluster == (uint32_t)-1) {
+        kprintf("Erreur : Binaire '%s' introuvable.\n", binary_name);
+        return;
+    }
+
+    // 2. CHARGEMENT ET EXÉCUTION
+    uint8_t* load_addr = (uint8_t*)0x200000; 
+    load_file(cluster, load_addr);
+    
+    // 3. PASSAGE DES ARGUMENTS (Le Graal pour CAT)
+    // Ici, on pourrait préparer argc/argv, mais pour un test simple,
+    // on lance juste le binaire.
+    void (*entry_point)() = (void (*)())load_addr;
+    entry_point(); 
+}*/
+
+void shell_run(char* command_line) {
+    // --- ÉTAPE 0 : SAUVEGARDER LA COMMANDE ENTIÈRE ---
+    // On l'enregistre AVANT de la découper avec strtok, 
+    // pour que l'app puisse lire "CAT.BIN NOTES.TXT" en entier.
+    set_current_command(command_line);
+
+    char temp_line[128];
+    strcpy(temp_line, command_line);
+
+    // 1. ISOLER LE NOM DU BINAIRE
+    char* binary_name = strtok(temp_line, " "); 
+    if (!binary_name) return;
+
+    char fat_name[11];
+    to_fat_name(binary_name, fat_name);
+
+    #if DEBUG
+        kprintf("[DEBUG] Recherche de : [%s]\n", fat_name);
+    #endif
+    
+    uint32_t cluster = fat_find_file_cluster(fat_name);
+    if (cluster == (uint32_t)-1) {
+        kprintf("Erreur : Binaire '%s' introuvable.\n", binary_name);
+        return;
+    }
+
+    // 2. CHARGEMENT
+    uint8_t* load_addr = (uint8_t*)0x200000; 
+    load_file(cluster, load_addr);
+    
+    // 3. EXÉCUTION
+    // On lance le binaire. L'application, une fois lancée, 
+    // fera un syscall SYS_GET_ARGV pour récupérer ce qu'on a sauvé à l'étape 0.
+    void (*entry_point)() = (void (*)())load_addr;
+    entry_point(); 
+}
+
+void shell_cp(const char* src, const char* dest) {
+    uint32_t src_cluster = fat_find_file_cluster(src);
+    if (src_cluster == (uint32_t)-1) {
+        kprintf("Source introuvable.\n");
+        return;
+    }
+
+    // On utilise un buffer temporaire (ex: 32 Ko max pour la copie)
+    uint8_t* cp_buf = (uint8_t*)0x400000; // Une autre zone tampon
+    load_file(src_cluster, cp_buf);
+
+    if (fat_find_file_cluster(dest) == (uint32_t)-1) {
+        fat_touch(dest);
+    }
+
+    fat_overwrite_file_content(dest, (const char*)cp_buf);
+    kprintf("Fichier copie.\n");
+}
+
 
 
 

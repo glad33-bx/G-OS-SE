@@ -57,3 +57,12 @@ void kfree(void *ptr) {
         header->next = header->next->next;
     }
 }
+
+uint32_t memory_get_total() {
+    return 128 * 1024 * 1024; // Exemple : retourne 128 Mo
+}
+
+uint32_t memory_get_used() {
+    // Calculer ici la somme des pages allouées
+    return 0; // À implémenter plus tard
+}
